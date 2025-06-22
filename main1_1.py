@@ -83,11 +83,19 @@ class ParticleAnalyzer:
         # Apply threshold based on the gradient_threshold parameter
         _, gradient_binary = cv2.threshold(gradient_magnitude, self.parameters['gradient_threshold'], 255, cv2.THRESH_BINARY)
         
+        # Create a mask for pores (very dark areas)
+        # Default pore threshold if not provided
+        pore_threshold = self.parameters.get('pore_threshold', 50)
+        _, pore_mask = cv2.threshold(self.image, pore_threshold, 255, cv2.THRESH_BINARY)
+        
         # Apply threshold with Otsu's method on the original filtered image
         _, intensity_binary = cv2.threshold(filtered_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         
         # Combine gradient-based, intensity-based, and Hessian-based binary images
         binary_image = cv2.bitwise_and(cv2.bitwise_and(gradient_binary, intensity_binary), hessian_binary)
+        
+        # Exclude pores from the binary image
+        binary_image = cv2.bitwise_and(binary_image, pore_mask)
         
         # Clean up the binary image with morphological operations
         kernel = np.ones((3, 3), np.uint8)
@@ -119,13 +127,23 @@ class ParticleAnalyzer:
                     minor_axis_nm > self.parameters['particle_y_max']):
                     continue
                 
+                # Calculate average intensity inside the contour to further filter out pores
+                mask = np.zeros(self.image.shape, dtype=np.uint8)
+                cv2.drawContours(mask, [contour], 0, 255, -1)
+                mean_intensity = cv2.mean(self.image, mask=mask)[0]
+                
+                # Skip if mean intensity is too low (likely a pore)
+                if mean_intensity < pore_threshold:
+                    continue
+                
                 self.particles.append({
                     'id': i,
                     'center': center,
                     'major_axis_nm': major_axis_nm,
                     'minor_axis_nm': minor_axis_nm,
                     'angle': angle,
-                    'contour': contour
+                    'contour': contour,
+                    'mean_intensity': mean_intensity
                 })
         
         return self.particles
@@ -230,7 +248,7 @@ class Particle:
         return (self.major_axis_nm + self.minor_axis_nm) / 2
 
 if __name__ == "__main__":
-    analyzer = ParticleAnalyzer("E:\\programming\\Particlesizes\\Particle_sizes\\images\\pim1.jpg", pixel_size_nm=11.16, particle_area_threshold_px=100, gradient_threshold=0.001, Hessian_threshold=0.001, particle_x_range=(300, 4000), particle_y_range=(300, 4000))
+    analyzer = ParticleAnalyzer("E:\\programming\\Particlesizes\\Particle_sizes\\images\\pim1.jpg", pixel_size_nm=11.16, particle_area_threshold_px=100, gradient_threshold=0.000001, Hessian_threshold=0.00001, particle_x_range=(200, 5000), particle_y_range=(200, 5000))
     particles = analyzer.analyze_particles()
     print(f"Detected {len(particles)} particles")
     analyzer.visualize_results(show_ellipses=True, show_ids=True)

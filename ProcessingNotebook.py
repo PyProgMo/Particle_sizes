@@ -12,7 +12,7 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 try:
-    import main1_1 as main1  # Import the main processing module
+    import main1 as main1  # Import the main processing module
 except ImportError:
     print("Error: Could not import main1.py. Make sure it's in the correct location.")
     sys.exit(1)
