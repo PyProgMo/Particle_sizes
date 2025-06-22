@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class ParticleAnalyzer:
-    def __init__(self, image_path, pixel_size_nm, particle_area_threshold_px=5, gradient_threshold=21.3, particle_x_range=(300, 4000), particle_y_range=(300, 4000)):
+    def __init__(self, image_path, pixel_size_nm, particle_area_threshold_px=5, gradient_threshold=21.3, Hessian_threshold=2, particle_x_range=(300, 4000), particle_y_range=(300, 4000)):
         """
         :param image_path: Path to the SEM image
         :param pixel_size_nm: Pixel size in nanometers (e.g., 11.16 for your image)
@@ -16,6 +16,7 @@ class ParticleAnalyzer:
         self.parameters = {
             'particle_area_threshold_px': particle_area_threshold_px,
             'gradient_threshold': gradient_threshold,
+            'Hessian_threshold': Hessian_threshold,
             'pixel_size_nm': pixel_size_nm,
             'particle_x_min': particle_x_range[0],
             'particle_x_max': particle_x_range[1],
@@ -61,6 +62,21 @@ class ParticleAnalyzer:
         # Calculate gradient magnitude
         gradient_magnitude = cv2.magnitude(grad_x, grad_y)
         
+        # Calculate Hessian matrix for blob detection
+        # Second derivatives
+        grad_xx = cv2.Sobel(grad_x, cv2.CV_64F, 1, 0, ksize=3)
+        grad_xy = cv2.Sobel(grad_x, cv2.CV_64F, 0, 1, ksize=3)
+        grad_yy = cv2.Sobel(grad_y, cv2.CV_64F, 0, 1, ksize=3)
+        
+        # Calculate determinant of Hessian
+        hessian_det = grad_xx * grad_yy - grad_xy * grad_xy
+        
+        # Normalize Hessian determinant to 0-255 range
+        hessian_det = cv2.normalize(hessian_det, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        
+        # Apply threshold based on Hessian threshold
+        _, hessian_binary = cv2.threshold(hessian_det, self.parameters['Hessian_threshold'], 255, cv2.THRESH_BINARY)
+        
         # Normalize gradient magnitude to 0-255 range
         gradient_magnitude = cv2.normalize(gradient_magnitude, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
         
@@ -70,8 +86,8 @@ class ParticleAnalyzer:
         # Apply threshold with Otsu's method on the original filtered image
         _, intensity_binary = cv2.threshold(filtered_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         
-        # Combine gradient-based and intensity-based binary images
-        binary_image = cv2.bitwise_and(gradient_binary, intensity_binary)
+        # Combine gradient-based, intensity-based, and Hessian-based binary images
+        binary_image = cv2.bitwise_and(cv2.bitwise_and(gradient_binary, intensity_binary), hessian_binary)
         
         # Clean up the binary image with morphological operations
         kernel = np.ones((3, 3), np.uint8)
@@ -214,7 +230,7 @@ class Particle:
         return (self.major_axis_nm + self.minor_axis_nm) / 2
 
 if __name__ == "__main__":
-    analyzer = ParticleAnalyzer("E:\\programming\\Particlesizes\\Particle_sizes\\images\\pim1.jpg", pixel_size_nm=11.16, particle_area_threshold_px=100, gradient_threshold=20, Hessian_thresh=2, particle_x_range=(300, 4000), particle_y_range=(300, 4000))
+    analyzer = ParticleAnalyzer("E:\\programming\\Particlesizes\\Particle_sizes\\images\\pim1.jpg", pixel_size_nm=11.16, particle_area_threshold_px=100, gradient_threshold=0.001, Hessian_threshold=0.001, particle_x_range=(300, 4000), particle_y_range=(300, 4000))
     particles = analyzer.analyze_particles()
     print(f"Detected {len(particles)} particles")
     analyzer.visualize_results(show_ellipses=True, show_ids=True)
