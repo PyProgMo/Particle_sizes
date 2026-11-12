@@ -340,7 +340,9 @@ class SegmentationGUI:
             return
         s = self.segmenter.stages
         view = self.view_var.get()
-        self.ax.clear()
+        # ax.clear() would leave old colorbar axes behind, so rebuild the figure
+        self.fig.clear()
+        self.ax = self.fig.add_subplot(111)
         self.ax.axis("off")
         if view == "Overlay":
             self.ax.imshow(self.segmenter.overlay(self.ids_var.get()))
